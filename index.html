@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ตารางเวลาและเบรค</title>
+    <style>
+        body {font-family: 'Arial', sans-serif; background: #000; color: #0f0; display: flex; justify-content: space-between; align-items: center; height: 100vh; margin: 0; padding: 20px;}
+        .time-container {text-align: center; flex: 2;}
+        .clock {font-size: 150px; font-weight: bold; margin-bottom: 20px; color: #0f0;}
+        .date {font-size: 50px; color: #fff;}
+        .break-schedule {background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,255,0,0.3); color: #000; width: 40%; flex: 1;}
+        .break-schedule h2 {text-align: center; margin-bottom: 20px; color: #000;}
+        table {width: 100%; border-collapse: collapse; color: #000;}
+        table, th, td {border: 1px solid #000;}
+        th, td {padding: 10px; text-align: center;}
+        .group-separator td {background: #f0f0f0; height: 15px; border: none;}
+        .active {background-color: #ff4d4d; color: #fff; font-weight: bold;}
+    </style>
+</head>
+<body>
+    <div class="time-container">
+        <div class="clock" id="clock"></div>
+        <div class="date" id="date"></div>
+    </div>
+
+    <div class="break-schedule">
+        <h2 id="shiftTitle">ตารางเวลาเบรค</h2>
+        <table id="breakTable">
+            <thead>
+                <tr>
+                    <th>กะ/กลุ่ม</th>
+                    <th>เบรค</th>
+                    <th>เวลา</th>
+                    <th>ระยะเวลา</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+
+    <script>
+        const breakTimes = {
+            "เช้า (07:00-15:00)": [
+                ["A1", "เบรค1", "08:45-09:00", "15 นาที"],
+                ["A2", "เบรค1", "09:00-09:15", "15 นาที"],
+                "sep",
+                ["A1", "เบรค2", "10:30-11:00", "30 นาที"],
+                ["A2", "เบรค2", "11:00-11:30", "30 นาที"],
+                "sep",
+                ["A1", "เบรค3", "13:00-13:15", "15 นาที"],
+                ["A2", "เบรค3", "13:15-13:30", "15 นาที"]
+            ],
+            "บ่าย (15:00-23:00)": [
+                ["B1", "เบรค1", "16:45-17:00", "15 นาที"],
+                ["B2", "เบรค1", "17:00-17:15", "15 นาที"],
+                "sep",
+                ["B1", "เบรค2", "18:00-18:30", "30 นาที"],
+                ["B2", "เบรค2", "18:30-19:00", "30 นาที"],
+                "sep",
+                ["B1", "เบรค3", "21:00-21:15", "15 นาที"],
+                ["B2", "เบรค3", "21:15-21:30", "15 นาที"]
+            ],
+            "ดึก (23:00-07:00)": [
+                ["C1", "เบรค1", "00:45-01:00", "15 นาที"],
+                ["C2", "เบรค1", "01:00-01:15", "15 นาที"],
+                "sep",
+                ["C1", "เบรค2", "02:30-03:00", "30 นาที"],
+                ["C2", "เบรค2", "03:00-03:30", "30 นาที"],
+                "sep",
+                ["C1", "เบรค3", "05:00-05:15", "15 นาที"],
+                ["C2", "เบรค3", "05:15-05:30", "15 นาที"]
+            ]
+        };
+
+        let lastAnnounced = "";
+
+        function getCurrentShift(hour) {
+            if (hour >= 7 && hour < 15) return "เช้า (07:00-15:00)";
+            if (hour >= 15 && hour < 23) return "บ่าย (15:00-23:00)";
+            return "ดึก (23:00-07:00)";
+        }
+
+        function renderTable(shift) {
+            const tbody = document.querySelector("#breakTable tbody");
+            tbody.innerHTML = "";
+            breakTimes[shift].forEach(item => {
+                if (item === "sep") {
+                    const tr = document.createElement("tr");
+                    tr.className = "group-separator";
+                    const td = document.createElement("td");
+                    td.colSpan = 4;
+                    tr.appendChild(td);
+                    tbody.appendChild(tr);
+                } else {
+                    const [group, bigBreak, time, duration] = item;
+                    const tr = document.createElement("tr");
+                    tr.innerHTML = `<td>${group}</td><td>${bigBreak}</td><td>${time}</td><td>${duration}</td>`;
+                    tr.setAttribute("data-time", time);
+                    tbody.appendChild(tr);
+                }
+            });
+            document.getElementById("shiftTitle").textContent = `ตารางเวลาเบรค - ${shift}`;
+        }
+
+        function speak(text) {
+            const synth = window.speechSynthesis;
+            const utterThis = new SpeechSynthesisUtterance(text);
+            utterThis.lang = 'th-TH';
+            synth.speak(utterThis);
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const hour = now.getHours();
+            const currentShift = getCurrentShift(hour);
+            renderTable(currentShift);
+            document.getElementById("clock").textContent = now.toLocaleTimeString('th-TH', { hour12: false });
+            document.getElementById("date").textContent = now.toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            highlightBreak(now);
+        }
+
+        function highlightBreak(now) {
+            const rows = document.querySelectorAll("#breakTable tbody tr");
+            rows.forEach(row => {
+                const timeRange = row.getAttribute("data-time");
+                if (!timeRange) return;
+                const [start, end] = timeRange.split("-").map(t => {
+                    let [h, m] = t.split(":" ).map(Number);
+                    const date = new Date(now);
+                    date.setHours(h, m, 0, 0);
+                    if (h < 7 && now.getHours() > 20) date.setDate(date.getDate() + 1);
+                    return date;
+                });
+                if (now >= start && now <= end) {
+                    row.classList.add("active");
+                    if (lastAnnounced !== timeRange) {
+                        speak(`ถึงเวลาเบรค ${timeRange}`);
+                        lastAnnounced = timeRange;
+                    }
+                } else {
+                    row.classList.remove("active");
+                }
+            });
+        }
+
+        setInterval(updateClock, 1000);
+    </script>
+</body>
+</html>
